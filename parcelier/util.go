@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
+	"path/filepath"
 
 	geojson "github.com/paulmach/orb/geojson"
 )
@@ -17,7 +19,17 @@ func FileExists(filename string) bool {
 }
 
 func LoadFile(filename string) ([]byte, error) {
-	fmt.Printf("opening %s\n", filename)
+
+	var err error
+	if !filepath.IsAbs(filename) {
+		filename, err = filepath.Abs(filename)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	fmt.Printf("opening %s\n", path.Base(filename))
+
 	file, err := os.OpenFile(filename, os.O_RDONLY, 0755)
 	if err != nil {
 		return nil, err
