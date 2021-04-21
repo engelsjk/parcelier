@@ -12,7 +12,7 @@ For tile requests that exceeded the server feature limit (typically 1000 feature
 
 ![](images/tiles.png)
 
-There are arguably better or more efficiently ways to accomplish this specific task. This is only one way that I've found to work reasonably well.
+There are arguably better or more efficient or more reasonable ways to accomplish this specific task. This is just one way that I've found to work reasonably well.
 
 ## Help
 
