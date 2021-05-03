@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/engelsjk/parcelier/parcelier"
+	"github.com/engelsjk/parcelier"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
