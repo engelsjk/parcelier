@@ -1,6 +1,7 @@
 package parcelier
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,6 +15,14 @@ func FileExists(filename string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+func DirExists(path string) bool {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return true
 }
 
 func LoadFile(filename string) ([]byte, error) {
@@ -42,19 +51,45 @@ func SaveGeoJSON(filePath string, data []byte) error {
 	return ioutil.WriteFile(filePath, data, 0644)
 }
 
-func GetFeature(data []byte) *geojson.Feature {
-	// Need to better handle FC vs F!
-	fc, err := geojson.UnmarshalFeatureCollection(data)
+func GetFeature(b []byte) (*geojson.Feature, error) {
+	fc, err := GetFeatureCollection(b)
 	if err == nil {
-		return fc.Features[0]
+		return fc.Features[0], nil
 	}
-	f, err := geojson.UnmarshalFeature(data)
+	f, err := geojson.UnmarshalFeature(b)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return f
+	return f, nil
 }
 
 func GetFeatureCollection(data []byte) (*geojson.FeatureCollection, error) {
 	return geojson.UnmarshalFeatureCollection(data)
+}
+
+func MatchParcelsCount(tilePath, parcelPath string) (bool, error) {
+	b, err := LoadFile(tilePath)
+	if err != nil {
+		return false, fmt.Errorf("unable to load tile file")
+	}
+	tile, err := GetFeature(b)
+	if err != nil {
+		return false, fmt.Errorf("unable to load tile feature")
+	}
+	b, err = LoadFile(parcelPath)
+	if err != nil {
+		return false, fmt.Errorf("unable to load parcels file")
+	}
+	parcels, err := GetFeatureCollection(b)
+	if err != nil {
+		return false, fmt.Errorf("unable to load parcels feature collection")
+	}
+	numParcels, ok := tile.Properties["num_parcels"].(float64)
+	if !ok {
+		return false, fmt.Errorf("tile num_parcels property is not available")
+	}
+	if int(numParcels) != len(parcels.Features) {
+		return false, fmt.Errorf("tile/parcels count doesn't match")
+	}
+	return true, nil
 }

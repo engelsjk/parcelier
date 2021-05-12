@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"os"
-	"path"
 
 	"github.com/engelsjk/parcelier"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -33,7 +30,7 @@ var (
 	verbose     = kingpin.Flag("verbose", "verbose").Default("false").Short('v').Bool()
 	veryVerbose = kingpin.Flag("vv", "very verbose").Default("false").Bool()
 	//
-	info = kingpin.Flag("info", "tile info").Default("false").Bool()
+	infoOnly = kingpin.Flag("info", "tile info only").Default("false").Bool()
 )
 
 func main() {
@@ -73,16 +70,14 @@ func main() {
 	}
 
 	if *parcelsPath != "." {
-		_, err := os.Stat(*parcelsPath)
-		if os.IsNotExist(err) {
+		if !parcelier.DirExists(*parcelsPath) {
 			fmt.Printf("parcels output path '%s' does not exist\n", *parcelsPath)
 			return
 		}
 	}
 
 	if *tilesPath != "" {
-		_, err := os.Stat(*tilesPath)
-		if os.IsNotExist(err) {
+		if !parcelier.DirExists(*tilesPath) {
 			fmt.Printf("tiles output path '%s' does not exist\n", *tilesPath)
 			return
 		}
@@ -90,25 +85,26 @@ func main() {
 
 	//
 
-	boundaryData, err := parcelier.LoadFile(*boundaryFile)
+	b, err := parcelier.LoadFile(*boundaryFile)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("unable to load boundary file %s\n", *boundaryFile)
 		return
 	}
-	boundaryFeature := parcelier.GetFeature(boundaryData)
+
+	boundaryFeature, err := parcelier.GetFeature(b)
+	if err != nil {
+		fmt.Printf("unable to load boundary feature\n")
+		return
+	}
 
 	tiler = parcelier.NewTiler(boundaryFeature.Geometry, *zoom)
 
-	fmt.Printf("running boundary %s\n", path.Base(*boundaryFile))
-	fmt.Printf("getting %d tiles at zoom %d\n", tiler.NumTiles, tiler.Zoom)
-
-	if *info {
+	parcelier.PrintInfo(*boundaryFile, tiler)
+	if *infoOnly {
 		return
 	}
 
 	parcelier.Run(tiler, opts)
-
-	log.Printf("done! %d tiles processed\n", len(tiler.Set))
+	parcelier.PrintDone(tiler)
 	return
-
 }
