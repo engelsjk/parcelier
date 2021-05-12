@@ -31,7 +31,8 @@ const (
 
 type Options struct {
 	URL              string
-	OutputFilepath   string
+	Agent            string
+	ParcelsPath      string
 	Update           bool
 	TimeWait         int
 	ParcelLimit      int
@@ -39,7 +40,7 @@ type Options struct {
 	Format           string
 	ParcelID         string
 	ParcelPIN        string
-	SaveTilePath     string
+	TilesPath        string
 	Verbose          bool
 	VeryVerbose      bool
 }
@@ -51,7 +52,7 @@ type Parcels struct {
 
 func Run(tiler *Tiler, options Options) {
 
-	api := NewAPI(options.URL)
+	api := NewAPI(options.URL, options.Agent)
 	api.verbose = options.Verbose
 	api.veryVerbose = options.VeryVerbose
 
@@ -82,7 +83,7 @@ func GetParcels(api *API, tile Tile, zoom int, opts Options) {
 		log.Println(baseLog)
 		return
 	case StatusTileFileExists:
-		log.Println(fmt.Sprintf("%s | %s", baseLog, filepath.Base(tile.GetFilepath(opts.OutputFilepath))))
+		log.Println(fmt.Sprintf("%s | %s", baseLog, filepath.Base(tile.GetFilepath(opts.ParcelsPath))))
 		return
 	case StatusTileNoParcels:
 		log.Println(baseLog)
@@ -90,8 +91,8 @@ func GetParcels(api *API, tile Tile, zoom int, opts Options) {
 	case StatusTileOK:
 		logSave, _ := SaveParcels(tile, parcels, opts)
 		log.Println(fmt.Sprintf("%s | saving...%s", baseLog, logSave))
-		if opts.SaveTilePath != "" {
-			filePath := tile.GetFilepath(opts.SaveTilePath)
+		if opts.TilesPath != "" {
+			filePath := tile.GetFilepath(opts.TilesPath)
 			f := geojson.NewFeature(tile.Bound().ToPolygon())
 			f.Properties["extent"] = tile.GetTileString()
 			f.Properties["num_parcels"] = parcels.NumFeatures
@@ -124,7 +125,7 @@ func GetParcelsFromTile(api *API, tile Tile, options Options) (*Parcels, string,
 
 	extent := fmt.Sprintf("%s", tile.GetExtentString())
 
-	if FileExists(tile.GetFilepath(options.OutputFilepath)) && !options.Update {
+	if FileExists(tile.GetFilepath(options.ParcelsPath)) && !options.Update {
 		return nil, StatusTileFileExists, nil
 	}
 
@@ -192,7 +193,7 @@ func SaveParcels(tile Tile, parcels *Parcels, opts Options) (string, error) {
 		return StatusGeoJSONError, err
 	}
 	filename := fmt.Sprintf("parcels-z%d-x%d-y%d.geojson", tile.Z, tile.X, tile.Y)
-	filePath := filepath.Join(opts.OutputFilepath, filename)
+	filePath := filepath.Join(opts.ParcelsPath, filename)
 	err = SaveGeoJSON(filePath, bJSON)
 	if err != nil {
 		return StatusSaveError, err

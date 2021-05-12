@@ -1,10 +1,8 @@
 package parcelier
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 
 	geojson "github.com/paulmach/orb/geojson"
@@ -27,8 +25,6 @@ func LoadFile(filename string) ([]byte, error) {
 			return nil, err
 		}
 	}
-
-	fmt.Printf("opening %s\n", path.Base(filename))
 
 	file, err := os.OpenFile(filename, os.O_RDONLY, 0755)
 	if err != nil {

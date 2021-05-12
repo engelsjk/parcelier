@@ -15,9 +15,10 @@ type ErrorMessage struct {
 	Details interface{}
 }
 
-func NewAPI(url string) *API {
+func NewAPI(url, agent string) *API {
 	return &API{
-		url: url,
+		url:   url,
+		agent: agent,
 		client: &http.Client{
 			Timeout: time.Duration(120 * time.Second),
 		},
@@ -27,6 +28,7 @@ func NewAPI(url string) *API {
 
 type API struct {
 	url         string
+	agent       string
 	queryParams *url.Values
 	client      *http.Client
 	verbose     bool
@@ -42,12 +44,13 @@ func (a *API) AddQueryParams(req *http.Request, queryParams map[string]string) {
 }
 
 func (a *API) Get(queryParams map[string]string) ([]byte, error) {
+
 	queryURL := fmt.Sprintf("%s/query", a.url)
 	req, err := http.NewRequest("GET", queryURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "parcelier")
+	req.Header.Set("User-Agent", a.agent)
 
 	a.AddQueryParams(req, queryParams)
 
@@ -88,10 +91,8 @@ func (a *API) Get(queryParams map[string]string) ([]byte, error) {
 
 	status := resp.StatusCode
 	switch status {
-	case 400:
+	case 400, 404:
 		return nil, fmt.Errorf("error: 400 : %s", string(body))
-	case 404:
-		return nil, fmt.Errorf("error: 404 : %s", string(body))
 	}
 	return body, nil
 }
