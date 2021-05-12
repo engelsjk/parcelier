@@ -92,7 +92,11 @@ func (a *API) Get(queryParams map[string]string) ([]byte, error) {
 	status := resp.StatusCode
 	switch status {
 	case 400, 404:
-		return nil, fmt.Errorf("error: 400 : %s", string(body))
+		err = fmt.Errorf("%s", resp.Status)
+		if a.verbose {
+			return nil, fmt.Errorf("%w | %s", err, string(body))
+		}
+		return nil, err
 	}
 	return body, nil
 }

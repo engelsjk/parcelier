@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"path"
 
 	"github.com/engelsjk/parcelier"
@@ -10,18 +11,17 @@ import (
 )
 
 var (
-	boundaryFile = kingpin.Flag("boundary", "boundary file").Default("").Short('b').String()
+	boundaryFile = kingpin.Flag("boundary", "boundary file (e.g. county)").Default("").Short('b').String()
 	extent       = kingpin.Flag("extent", "extent tile (z/x/y)").Default("").Short('e').String()
-	url          = kingpin.Flag("url", "esri url").Default("").Short('u').String()
+	url          = kingpin.Flag("url", "mapserver layer url").Default("").Short('u').String()
 	//
 	agent = kingpin.Flag("agent", "user agent").Default("parcelier").Short('a').String()
-	zoom  = kingpin.Flag("zoom", "initial zoom").Default("13").Short('z').Int()
+	zoom  = kingpin.Flag("zoom", "base zoom").Default("13").Short('z').Int()
 	//
 	parcelsPath = kingpin.Flag("parcels", "parcel output dir").Default(".").Short('p').String()
 	tilesPath   = kingpin.Flag("tiles", "tile output dir").Default("").Short('t').String()
 	//
-	id  = kingpin.Flag("id", "parcel object id key").Default("OBJECTID").String()
-	pin = kingpin.Flag("pin", "parcel pin key").Default("PIN").String()
+	id = kingpin.Flag("id", "object id").Default("OBJECTID").String()
 	//
 	sr     = kingpin.Flag("sr", "spatial reference system").Default("4326").String()
 	format = kingpin.Flag("format", "format").Default("geojson").Short('f').String()
@@ -52,7 +52,6 @@ func main() {
 		SpatialReference: *sr,
 		Format:           *format,
 		ParcelID:         *id,
-		ParcelPIN:        *pin,
 		TilesPath:        *tilesPath,
 		Verbose:          *verbose,
 		VeryVerbose:      *veryVerbose,
@@ -68,11 +67,25 @@ func main() {
 		return
 	}
 
-	log.Println(*url)
-
 	if *url == "" {
 		fmt.Println("no url provided")
 		return
+	}
+
+	if *parcelsPath != "." {
+		_, err := os.Stat(*parcelsPath)
+		if os.IsNotExist(err) {
+			fmt.Printf("parcels output path '%s' does not exist\n", *parcelsPath)
+			return
+		}
+	}
+
+	if *tilesPath != "" {
+		_, err := os.Stat(*tilesPath)
+		if os.IsNotExist(err) {
+			fmt.Printf("tiles output path '%s' does not exist\n", *tilesPath)
+			return
+		}
 	}
 
 	//
@@ -86,8 +99,8 @@ func main() {
 
 	tiler = parcelier.NewTiler(boundaryFeature.Geometry, *zoom)
 
-	fmt.Printf("running boundary %s...\n", path.Base(*boundaryFile))
-	fmt.Printf("%d tiles at zoom %d\n", tiler.NumTiles, tiler.Zoom)
+	fmt.Printf("running boundary %s\n", path.Base(*boundaryFile))
+	fmt.Printf("getting %d tiles at zoom %d\n", tiler.NumTiles, tiler.Zoom)
 
 	if *info {
 		return

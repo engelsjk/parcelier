@@ -39,7 +39,7 @@ type Options struct {
 	SpatialReference string
 	Format           string
 	ParcelID         string
-	ParcelPIN        string
+	ParcelKey        string
 	TilesPath        string
 	Verbose          bool
 	VeryVerbose      bool
