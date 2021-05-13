@@ -24,21 +24,23 @@ parcelier --help
 usage: parcelier [<flags>]
 
 Flags:
-      --help              Show context-sensitive help (also try --help-long and --help-man).
-  -b, --boundary=""       boundary filepath
-      --extent=""         extent tile (z/x/y)
-      --url=""            esri url
-  -z, --zoom=13           initial zoom
-  -o, --output="."        parcel output dir
-  -t, --tiles=""          tile output dir
-  -s, --sr="4326"         spatial reference system
-  -i, --id="OBJECTID"     parcel object id key
-  -p, --pin="PIN"         parcel pin key
-  -f, --format="geojson"  format
-  -w, --wait=500          query wait (ms)
-  -u, --update            update existing files
-  -v, --verbose           verbose
-      --vv                very verbose
+      --help               Show context-sensitive help (also try --help-long and --help-man).
+  -b, --boundary=""        boundary file (e.g. county)
+  -e, --extent=""          extent tile (z/x/y)
+  -u, --url=""             mapserver layer url
+  -a, --agent="parcelier"  user agent
+  -z, --zoom=13            base zoom
+  -p, --parcels="."        parcel output dir
+  -t, --tiles=""           tile output dir
+      --id="OBJECTID"      object id
+      --sr="4326"          spatial reference system
+  -f, --format="geojson"   format
+      --limit=1000         object limit at zoom
+      --wait=500           query wait (ms)
+      --update             update existing files
+  -v, --verbose            verbose
+      --vv                 very verbose
+      --info               tile info only
 ```
 
 ## Commands
