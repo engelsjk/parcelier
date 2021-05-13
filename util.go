@@ -1,7 +1,6 @@
 package parcelier
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	geojson "github.com/paulmach/orb/geojson"
 )
 
+// FileExists ...
 func FileExists(filename string) bool {
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -17,6 +17,7 @@ func FileExists(filename string) bool {
 	return !info.IsDir()
 }
 
+// DirExists ...
 func DirExists(path string) bool {
 	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -25,6 +26,7 @@ func DirExists(path string) bool {
 	return true
 }
 
+// LoadFile ...
 func LoadFile(filename string) ([]byte, error) {
 
 	var err error
@@ -47,10 +49,12 @@ func LoadFile(filename string) ([]byte, error) {
 	return b, nil
 }
 
+// SaveGeoJSON ...
 func SaveGeoJSON(filePath string, data []byte) error {
 	return ioutil.WriteFile(filePath, data, 0644)
 }
 
+// GetFeature ...
 func GetFeature(b []byte) (*geojson.Feature, error) {
 	fc, err := GetFeatureCollection(b)
 	if err == nil {
@@ -63,33 +67,7 @@ func GetFeature(b []byte) (*geojson.Feature, error) {
 	return f, nil
 }
 
+// GetFeatureCollection ...
 func GetFeatureCollection(data []byte) (*geojson.FeatureCollection, error) {
 	return geojson.UnmarshalFeatureCollection(data)
-}
-
-func MatchParcelsCount(tilePath, parcelPath string) (bool, error) {
-	b, err := LoadFile(tilePath)
-	if err != nil {
-		return false, fmt.Errorf("unable to load tile file")
-	}
-	tile, err := GetFeature(b)
-	if err != nil {
-		return false, fmt.Errorf("unable to load tile feature")
-	}
-	b, err = LoadFile(parcelPath)
-	if err != nil {
-		return false, fmt.Errorf("unable to load parcels file")
-	}
-	parcels, err := GetFeatureCollection(b)
-	if err != nil {
-		return false, fmt.Errorf("unable to load parcels feature collection")
-	}
-	numParcels, ok := tile.Properties["num_parcels"].(float64)
-	if !ok {
-		return false, fmt.Errorf("tile num_parcels property is not available")
-	}
-	if int(numParcels) != len(parcels.Features) {
-		return false, fmt.Errorf("tile/parcels count doesn't match")
-	}
-	return true, nil
 }

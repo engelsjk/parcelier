@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,17 +16,17 @@ const (
 )
 
 const (
-	StatusAPIError               = "status: api error"
-	StatusJSONConversionError    = "status: json conversion error"
-	StatusGeoJSONError           = "status: geojson error"
-	StatusSaveError              = "status: unable to save error"
-	StatusSaveSucceeded          = "status: save succeeded"
-	StatusError                  = "status: error"
-	StatusTileFileExists         = "status: tile file exists"
-	StatusTileNoParcels          = "status: tile no parcels"
-	StatusTileOK                 = "status: tile ok"
-	StatusTileExceedsParcelLimit = "status: tile exceeds parcel limit"
-	StatusUnknown                = "status: unknown"
+	StatusAPIError                = "api error"
+	StatusJSONConversionError     = "json conversion error"
+	StatusGeoJSONError            = "geojson error"
+	StatusSaveError               = "unable to save error"
+	StatusSaveSucceeded           = "save succeeded"
+	StatusError                   = "error"
+	StatusTileFileExistsWithMatch = "tile file exists (parcel count matches)"
+	StatusTileNoParcels           = "tile no parcels"
+	StatusTileOK                  = "tile ok"
+	StatusTileExceedsParcelLimit  = "tile exceeds parcel limit"
+	StatusUnknown                 = "unknown"
 )
 
 type Options struct {
@@ -48,7 +47,7 @@ type Options struct {
 
 type Parcels struct {
 	FeatureCollection *geojson.FeatureCollection
-	NumFeatures       int
+	Count             int
 }
 
 func Run(tiler *Tiler, options Options) {
@@ -60,113 +59,93 @@ func Run(tiler *Tiler, options Options) {
 	limiter := time.Tick(time.Millisecond * time.Duration(options.TimeWait))
 
 	for i := 0; i < tiler.NumTiles; i++ {
-
-		tile, err := tiler.GetTileAtIndex(i)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		tilePath := tile.GetTilePath(options.TilesPath)
-
-		if FileExists(tilePath) && !options.Update {
-			parcelPath := tile.GetParcelPath(options.ParcelsPath)
-			if ok, err := MatchParcelsCount(tilePath, parcelPath); ok {
-				fmt.Printf("%s | tile: %s | %s...skipping\n", StatusTileFileExists, tile.GetTileString(), "parcels count match")
-			} else {
-				fmt.Printf("%s | tile: %s | %s...skipping\n", StatusTileFileExists, tile.GetTileString(), err)
-			}
-			continue
-		}
-
+		tile := tiler.GetTileAtIndex(i)
 		<-limiter
 		GetParcels(api, tile, tiler.Zoom, options)
 	}
 }
 
+// GetParcels ...
 func GetParcels(api *API, tile Tile, zoom int, opts Options) {
-	var numParcels int
 
 	parcels, status, err := GetParcelsFromTile(api, tile, opts)
 
-	if parcels == nil {
-		numParcels = -1
-	} else {
-		numParcels = parcels.NumFeatures
-	}
-
-	baseLog := fmt.Sprintf("%s | tile: %s | parcels: %d", status, tile.GetTileString(), numParcels)
+	baseLog := fmt.Sprintf("status: %s | tile: %s | parcels: %d", status, tile.GetTileString(), parcels.Count)
 
 	switch status {
 	case StatusError:
+		if opts.Verbose {
+			fmt.Printf("%s | %s\n", baseLog, err)
+			break
+		}
 		fmt.Println(baseLog)
-		return
-	case StatusTileFileExists:
-		fmt.Printf("%s | %s\n", baseLog, filepath.Base(tile.GetTilePath(opts.TilesPath)))
-		return
+	case StatusTileFileExistsWithMatch:
+		fmt.Printf("%s | %s\n", baseLog, "skipping")
 	case StatusTileNoParcels:
 		fmt.Println(baseLog)
-		return
 	case StatusTileOK:
-		logSave, _ := SaveParcels(tile, parcels, opts)
-		fmt.Printf("%s | saving...%s\n", baseLog, logSave)
+		saveLog, _ := SaveParcels(tile, parcels, opts)
+		fmt.Printf("%s | saving...%s\n", baseLog, saveLog)
 		if opts.TilesPath != "" {
-			filePath := tile.GetTilePath(opts.TilesPath)
-			f := geojson.NewFeature(tile.Bound().ToPolygon())
-			f.Properties["extent"] = tile.GetTileString()
-			f.Properties["num_parcels"] = parcels.NumFeatures
-			b, _ := f.MarshalJSON()
-			SaveGeoJSON(filePath, b)
+			saveLog, _ = SaveTile(tile, parcels.Count, opts)
+			fmt.Printf("(option) saving tile...%s\n", saveLog)
 		}
-		return
 	case StatusTileExceedsParcelLimit:
-		fmt.Printf("%s | %s\n", baseLog, "")
+		fmt.Printf("%s | %s\n", baseLog, "iterating")
+
 		newZoom := zoom + 1
-		if newZoom < ZoomLimit {
-			fmt.Printf("rerunning tile %s at zoom %d...\n", tile.GetTileString(), newZoom)
-			newTiler := NewTiler(tile.Bound().ToPolygon(), newZoom)
-			Run(newTiler, opts)
-		} else {
+		if newZoom >= ZoomLimit {
 			fmt.Printf("%s | zoom limit %d exceeded!\n", baseLog, ZoomLimit)
-			return
+			break
 		}
+
+		fmt.Printf("rerunning tile %s at zoom %d...\n", tile.GetTileString(), newZoom)
+		newTiler := NewTiler(tile.Bound().ToPolygon(), newZoom)
+		Run(newTiler, opts)
 	case StatusUnknown:
 		fmt.Println(baseLog)
-		return
 	default:
-		// todo: handle all Status*Error returns from GetParcelsFromTile
-		fmt.Printf("%s | %s\n", status, err)
-		return
+		fmt.Printf("%s | %s\n", baseLog, err)
 	}
 }
 
-func GetParcelsFromTile(api *API, tile Tile, options Options) (*Parcels, string, error) {
+// GetParcelsFromTile queries the API for parcels using the given tile.
+func GetParcelsFromTile(api *API, tile Tile, opts Options) (*Parcels, string, error) {
 
-	extent := fmt.Sprintf("%s", tile.GetExtentString())
+	// todo: check if json response w/ error message
+	// {"error":{"code":400,"message":"Failed to execute query.","details":[]}}
 
-	if FileExists(tile.GetTilePath(options.ParcelsPath)) && !options.Update {
-		return nil, StatusTileFileExists, nil
+	tilePath := tile.GetTilePath(opts.TilesPath)
+
+	if FileExists(tilePath) && !opts.Update {
+		parcelPath := tile.GetParcelPath(opts.ParcelsPath)
+		ok, numParcels, _ := ParcelsCountMatch(tilePath, parcelPath)
+		if ok {
+			return &Parcels{Count: numParcels}, StatusTileFileExistsWithMatch, nil
+		}
 	}
 
-	var f string
-	switch strings.ToUpper(options.Format) {
+	extent := tile.GetExtentString()
+
+	var format string
+	switch strings.ToUpper(opts.Format) {
 	case "GEOJSON":
-		f = "geoJSON"
+		format = "geoJSON"
 	case "JSON":
-		f = "JSON"
+		format = "JSON"
 	}
 
 	queryParams := map[string]string{
-		"orderByFields":  options.ParcelID,
+		"orderByFields":  opts.ParcelID,
 		"geometry":       extent,
 		"geometryType":   "esriGeometryEnvelope",
 		"returnGeometry": "true",
 		"where":          "",
-		"f":              f,
+		"f":              format,
 		"outfields":      "*",
 		"spatialRel":     "esriSpatialRelEnvelopeIntersects",
-		"inSR":           options.SpatialReference,
-		"outSR":          options.SpatialReference,
+		"inSR":           opts.SpatialReference,
+		"outSR":          opts.SpatialReference,
 	}
 
 	b, err := api.Get(queryParams)
@@ -174,11 +153,8 @@ func GetParcelsFromTile(api *API, tile Tile, options Options) (*Parcels, string,
 		return nil, StatusAPIError, err
 	}
 
-	// todo: check if json response w/ error message
-	// {"error":{"code":400,"message":"Failed to execute query.","details":[]}}
-
-	if f == "JSON" {
-		b, err = arcgis2geojson.Convert(b, options.ParcelID)
+	if format == "JSON" {
+		b, err = arcgis2geojson.Convert(b, opts.ParcelID)
 		if err != nil {
 			return nil, StatusJSONConversionError, err
 		}
@@ -191,21 +167,53 @@ func GetParcelsFromTile(api *API, tile Tile, options Options) (*Parcels, string,
 
 	parcels := &Parcels{
 		FeatureCollection: featureCollection,
-		NumFeatures:       len(featureCollection.Features),
+		Count:             len(featureCollection.Features),
 	}
 
-	if parcels.NumFeatures == 0 {
+	if parcels.Count == 0 {
 		return parcels, StatusTileNoParcels, nil
 	}
-	if parcels.NumFeatures < options.ParcelLimit {
+	if parcels.Count < opts.ParcelLimit {
 		return parcels, StatusTileOK, nil
 	}
-	if parcels.NumFeatures >= options.ParcelLimit {
+	if parcels.Count >= opts.ParcelLimit {
 		return parcels, StatusTileExceedsParcelLimit, nil
 	}
+
 	return parcels, StatusUnknown, nil
 }
 
+// ParcelsCountMatch compares a tile and parcel file for a matching parcel count.
+func ParcelsCountMatch(tilePath, parcelPath string) (bool, int, error) {
+	b, err := LoadFile(tilePath)
+	if err != nil {
+		return false, 0, fmt.Errorf("unable to load tile file")
+	}
+	tile, err := GetFeature(b)
+	if err != nil {
+		return false, 0, fmt.Errorf("unable to load tile feature")
+	}
+	b, err = LoadFile(parcelPath)
+	if err != nil {
+		return false, 0, fmt.Errorf("unable to load parcels file")
+	}
+	parcels, err := GetFeatureCollection(b)
+	if err != nil {
+		return false, 0, fmt.Errorf("unable to load parcels feature collection")
+	}
+	var numParcels int
+	np, ok := tile.Properties["num_parcels"].(float64)
+	if !ok {
+		return false, int(np), fmt.Errorf("tile num_parcels property is not available")
+	}
+	numParcels = int(np)
+	if numParcels != len(parcels.Features) {
+		return false, numParcels, fmt.Errorf("tile/parcels count doesn't match")
+	}
+	return true, numParcels, nil
+}
+
+// SaveParcels saves a FeatureCollection of parcels for the given tile.
 func SaveParcels(tile Tile, parcels *Parcels, opts Options) (string, error) {
 	b, err := json.MarshalIndent(parcels.FeatureCollection, "", " ")
 	if err != nil {
@@ -219,11 +227,30 @@ func SaveParcels(tile Tile, parcels *Parcels, opts Options) (string, error) {
 	return StatusSaveSucceeded, nil
 }
 
-func PrintInfo(boundaryFile string, tiler *Tiler) {
-	fmt.Printf("running boundary %s\n", path.Base(boundaryFile))
-	fmt.Printf("getting %d tiles at zoom %d\n", tiler.NumTiles, tiler.Zoom)
+// SaveTile saves a Feature for the given tile.
+func SaveTile(tile Tile, numParcels int, opts Options) (string, error) {
+	f := geojson.NewFeature(tile.Bound().ToPolygon())
+	f.Properties["extent"] = tile.GetTileString()
+	f.Properties["num_parcels"] = numParcels
+	b, err := f.MarshalJSON()
+	if err != nil {
+		return StatusGeoJSONError, err
+	}
+	filePath := tile.GetTilePath(opts.TilesPath)
+	err = SaveGeoJSON(filePath, b)
+	if err != nil {
+		return StatusSaveError, err
+	}
+	return StatusSaveSucceeded, nil
 }
 
+// PrintInfo prints the boundary file and count of covering tiles.
+func PrintInfo(boundaryFile string, tiler *Tiler) {
+	fmt.Printf("running boundary %s\n", path.Base(boundaryFile))
+	fmt.Printf("covering %d tiles at zoom %d\n", tiler.NumTiles, tiler.Zoom)
+}
+
+// PrintDone prints the number of tiles processed.
 func PrintDone(tiler *Tiler) {
 	fmt.Printf("done! %d tiles processed\n", len(tiler.Set))
 }

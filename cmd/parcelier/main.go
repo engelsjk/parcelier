@@ -71,14 +71,14 @@ func main() {
 
 	if *parcelsPath != "." {
 		if !parcelier.DirExists(*parcelsPath) {
-			fmt.Printf("parcels output path '%s' does not exist\n", *parcelsPath)
+			fmt.Printf("output path '%s' does not exist\n", *parcelsPath)
 			return
 		}
 	}
 
 	if *tilesPath != "" {
 		if !parcelier.DirExists(*tilesPath) {
-			fmt.Printf("tiles output path '%s' does not exist\n", *tilesPath)
+			fmt.Printf("output path '%s' does not exist\n", *tilesPath)
 			return
 		}
 	}
@@ -106,5 +106,4 @@ func main() {
 
 	parcelier.Run(tiler, opts)
 	parcelier.PrintDone(tiler)
-	return
 }
